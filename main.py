@@ -86,7 +86,9 @@ class ObsidianTUI:
                     print(f"Searching for: {tags}")
                 
                 # Check if any search tag is a substring of any file tag
-                if any(any(search_tag in file_tag for file_tag in file_tags) for search_tag in tags):
+                # or if any file tag is a substring of any search tag
+                if any(any(search_tag in file_tag or file_tag in search_tag 
+                          for file_tag in file_tags) for search_tag in tags):
                     results.append((file, content))
                     
         return results
@@ -107,6 +109,32 @@ class ObsidianTUI:
         except ValueError:
             pass
         return results
+
+    def get_all_tags(self) -> List[str]:
+        """Collect all unique tags from the vault"""
+        all_tags = set()
+        files = self.get_markdown_files()
+        
+        for file in files:
+            with open(file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+                # Look for YAML frontmatter
+                frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+                if frontmatter_match:
+                    frontmatter = frontmatter_match.group(1)
+                    # Look for tags in YAML frontmatter
+                    tags_match = re.search(r'tags:\s*\[(.*?)\]', frontmatter)
+                    if tags_match:
+                        # Split by comma and clean each tag
+                        yaml_tags = [t.strip().strip('"\'') for t in tags_match.group(1).split(',')]
+                        all_tags.update(yaml_tags)
+                
+                # Look for inline tags
+                inline_tags = re.findall(r'#(\w+)', content)
+                all_tags.update(inline_tags)
+        
+        return sorted(list(all_tags))
 
     def draw_menu(self):
         self.screen.clear()
@@ -155,7 +183,7 @@ class ObsidianTUI:
             return [tag.strip() for tag in input_str.split(',') if tag.strip()]
         return input_str
 
-    def draw_results(self, results: List[Tuple[str, str]]):
+    def draw_results(self, results: List[Tuple[str, str]], search_terms: str = None):
         self.screen.clear()
         height, width = self.screen.getmaxyx()
         current_selection = 0
@@ -163,13 +191,17 @@ class ObsidianTUI:
         while True:
             self.screen.clear()
             
-            # Draw title
+            # Draw title and search terms
             title = f"Found {len(results)} results"
             self.screen.addstr(0, (width - len(title)) // 2, title, curses.A_BOLD)
             
+            if search_terms:
+                search_line = f"Search terms: {search_terms}"
+                self.screen.addstr(1, (width - len(search_line)) // 2, search_line)
+            
             # Draw results
             for idx, (file, content) in enumerate(results):
-                if idx >= height - 2:  # Leave space for instructions
+                if idx >= height - 3:  # Leave space for instructions and search terms
                     break
                     
                 # Get first line (SUBJECT) and filename
@@ -188,9 +220,9 @@ class ObsidianTUI:
                 
                 # Highlight selected item
                 if idx == current_selection:
-                    self.screen.addstr(idx + 1, 2, display, curses.A_REVERSE)
+                    self.screen.addstr(idx + 2, 2, display, curses.A_REVERSE)
                 else:
-                    self.screen.addstr(idx + 1, 2, display)
+                    self.screen.addstr(idx + 2, 2, display)
             
             # Draw instructions
             instructions = "↑↓ to select, Enter to view, Esc to go back, Ctrl+q to exit"
@@ -205,7 +237,7 @@ class ObsidianTUI:
             
             if key == curses.KEY_UP and current_selection > 0:
                 current_selection -= 1
-            elif key == curses.KEY_DOWN and current_selection < min(len(results) - 1, height - 3):
+            elif key == curses.KEY_DOWN and current_selection < min(len(results) - 1, height - 4):
                 current_selection += 1
             elif key == 10:  # Enter key
                 self.display_content(results[current_selection])
@@ -285,12 +317,12 @@ class ObsidianTUI:
                         query = self.draw_search_input("Enter search term: ")
                         if query:
                             results = self.search_by_subject(query)
-                            self.draw_results(results)
+                            self.draw_results(results, f"Subject: {query}")
                     elif self.menu_items[self.current_selection] == "Search by Tag(s)":
                         tags = self.draw_search_input("Enter tags (comma-separated): ", is_tag_search=True)
                         if tags:
                             results = self.search_by_tags(tags)
-                            self.draw_results(results)
+                            self.draw_results(results, f"Tags: {', '.join(tags)}")
                 elif key == 3:  # Ctrl+C
                     break
                 elif key == 17:  # Try Ctrl+q as 17
