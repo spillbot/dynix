@@ -186,37 +186,40 @@ class ObsidianTUI:
     def display_content(self, result: Tuple[str, str]):
         """Display content directly in TUI"""
         file, content = result
-        self.screen.clear()
         height, width = self.screen.getmaxyx()
         
         # Split content into lines
         lines = content.split('\n')
         current_line = 0
         
+        # Create a pad for the content
+        pad = curses.newpad(len(lines) + 1, width)
+        pad.scrollok(True)
+        
+        # Write all content to pad once
+        for idx, line in enumerate(lines):
+            if len(line) > width - 2:
+                line = line[:width - 5] + "..."
+            try:
+                pad.addstr(idx, 1, line)
+            except curses.error:
+                pass
+        
         while True:
-            self.screen.clear()
-            
             # Draw title
-            title = os.path.basename(file)
-            self.screen.addstr(0, (width - len(title)) // 2, title, curses.A_BOLD)
+            self.screen.addstr(0, (width - len(os.path.basename(file))) // 2, 
+                             os.path.basename(file), curses.A_BOLD)
             
-            # Display content
-            display_height = height - 3  # Space for title and instructions
-            for i in range(display_height):
-                line_idx = current_line + i
-                if line_idx < len(lines):
-                    try:
-                        line = lines[line_idx]
-                        if len(line) > width - 2:
-                            line = line[:width - 5] + "..."
-                        self.screen.addstr(i + 1, 1, line)
-                    except curses.error:
-                        pass
+            # Show content from pad
+            try:
+                pad.refresh(current_line, 0, 1, 0, height - 2, width - 1)
+            except curses.error:
+                pass
             
             # Draw instructions
-            instructions = "↑↓ to scroll, Esc to go back"
             try:
-                self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
+                self.screen.addstr(height - 1, (width - 20) // 2, 
+                                 "↑↓ to scroll, Esc to go back")
             except curses.error:
                 pass
             
@@ -227,9 +230,10 @@ class ObsidianTUI:
             
             if key == curses.KEY_UP and current_line > 0:
                 current_line -= 1
-            elif key == curses.KEY_DOWN and current_line < len(lines) - display_height:
+            elif key == curses.KEY_DOWN and current_line < len(lines) - (height - 3):
                 current_line += 1
             elif key == 27:  # Esc
+                self.screen.clear()  # Clear once before returning
                 break
 
     def run(self):
