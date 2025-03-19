@@ -53,20 +53,42 @@ class ObsidianTUI:
     def search_by_tags(self, tags: List[str]) -> List[Tuple[str, str]]:
         results = []
         files = self.get_markdown_files()
+        tags = [tag.lower() for tag in tags]  # Convert search tags to lowercase
+        
         for file in files:
             with open(file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Look for YAML frontmatter tags or inline tags
-                found_tags = re.findall(r'tags:\s*\[(.*?)\]|#(\w+)', content)
-                file_tags = []
-                for tag_match in found_tags:
-                    if tag_match[0]:  # YAML frontmatter
-                        file_tags.extend([t.strip() for t in tag_match[0].split(',')])
-                    if tag_match[1]:  # Inline tag
-                        file_tags.append(tag_match[1])
                 
-                if any(tag.lower() in [ft.lower() for ft in file_tags] for tag in tags):
+                # Look for YAML frontmatter
+                frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+                file_tags = []
+                
+                if frontmatter_match:
+                    frontmatter = frontmatter_match.group(1)
+                    # Look for tags in YAML frontmatter
+                    tags_match = re.search(r'tags:\s*\[(.*?)\]', frontmatter)
+                    if tags_match:
+                        # Split by comma and clean each tag
+                        yaml_tags = [t.strip().strip('"\'') for t in tags_match.group(1).split(',')]
+                        file_tags.extend(yaml_tags)
+                
+                # Look for inline tags
+                inline_tags = re.findall(r'#(\w+)', content)
+                file_tags.extend(inline_tags)
+                
+                # Convert all file tags to lowercase for case-insensitive comparison
+                file_tags = [tag.lower() for tag in file_tags]
+                
+                # Debug output
+                if file_tags:
+                    print(f"File: {file}")
+                    print(f"Found tags: {file_tags}")
+                    print(f"Searching for: {tags}")
+                
+                # Check if any search tag is a substring of any file tag
+                if any(any(search_tag in file_tag for file_tag in file_tags) for search_tag in tags):
                     results.append((file, content))
+                    
         return results
 
     def search_by_date(self, date_str: str) -> List[Tuple[str, str]]:
@@ -104,12 +126,12 @@ class ObsidianTUI:
                 self.screen.addstr(y, x, item)
         
         # Draw instructions
-        instructions = "Use ↑↓ arrows to navigate, Enter to select"
+        instructions = "Use ↑↓ arrows to navigate, Enter to select, Ctrl+Q to exit"
         self.screen.addstr(height - 2, (width - len(instructions)) // 2, instructions)
         
         self.screen.refresh()
 
-    def draw_search_input(self, prompt: str) -> str:
+    def draw_search_input(self, prompt: str, is_tag_search: bool = False) -> str:
         self.screen.clear()
         height, width = self.screen.getmaxyx()
         
@@ -128,6 +150,9 @@ class ObsidianTUI:
         curses.noecho()
         curses.curs_set(0)
         
+        if is_tag_search:
+            # Split input into list of tags and clean them
+            return [tag.strip() for tag in input_str.split(',') if tag.strip()]
         return input_str
 
     def draw_results(self, results: List[Tuple[str, str]]):
@@ -168,11 +193,15 @@ class ObsidianTUI:
                     self.screen.addstr(idx + 1, 2, display)
             
             # Draw instructions
-            instructions = "↑↓ to select, Enter to view, Esc to go back"
+            instructions = "↑↓ to select, Enter to view, Esc to go back, Ctrl+q to exit"
             self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
             self.screen.refresh()
             
             key = self.screen.getch()
+            
+            # Debug: Print key code
+            self.screen.addstr(height - 2, 0, f"Key code: {key}")
+            self.screen.refresh()
             
             if key == curses.KEY_UP and current_selection > 0:
                 current_selection -= 1
@@ -182,6 +211,8 @@ class ObsidianTUI:
                 self.display_content(results[current_selection])
             elif key == 27:  # Esc key
                 break
+            elif key == 17:  # Try Ctrl+q as 17
+                raise KeyboardInterrupt
 
     def display_content(self, result: Tuple[str, str]):
         """Display content directly in TUI"""
@@ -205,36 +236,34 @@ class ObsidianTUI:
             except curses.error:
                 pass
         
+        # Draw static elements once
+        title = os.path.basename(file)
+        self.screen.addstr(0, (width - len(title)) // 2, title, curses.A_BOLD)
+        self.screen.addstr(height - 1, (width - 40) // 2, "↑↓ to scroll, Esc to go back, Ctrl+q to exit")
+        self.screen.refresh()
+        
         while True:
-            # Draw title
-            self.screen.addstr(0, (width - len(os.path.basename(file))) // 2, 
-                             os.path.basename(file), curses.A_BOLD)
-            
             # Show content from pad
             try:
                 pad.refresh(current_line, 0, 1, 0, height - 2, width - 1)
             except curses.error:
                 pass
             
-            # Draw instructions
-            try:
-                self.screen.addstr(height - 1, (width - 20) // 2, 
-                                 "↑↓ to scroll, Esc to go back")
-            except curses.error:
-                pass
-            
-            self.screen.refresh()
-            
             # Handle input
             key = self.screen.getch()
+            
+            # Debug: Print key code
+            self.screen.addstr(height - 2, 0, f"Key code: {key}")
+            self.screen.refresh()
             
             if key == curses.KEY_UP and current_line > 0:
                 current_line -= 1
             elif key == curses.KEY_DOWN and current_line < len(lines) - (height - 3):
                 current_line += 1
             elif key == 27:  # Esc
-                self.screen.clear()  # Clear once before returning
                 break
+            elif key == 17:  # Try Ctrl+q as 17
+                raise KeyboardInterrupt
 
     def run(self):
         def main(stdscr):
@@ -257,8 +286,15 @@ class ObsidianTUI:
                         if query:
                             results = self.search_by_subject(query)
                             self.draw_results(results)
+                    elif self.menu_items[self.current_selection] == "Search by Tag(s)":
+                        tags = self.draw_search_input("Enter tags (comma-separated): ", is_tag_search=True)
+                        if tags:
+                            results = self.search_by_tags(tags)
+                            self.draw_results(results)
                 elif key == 3:  # Ctrl+C
                     break
+                elif key == 17:  # Try Ctrl+q as 17
+                    raise KeyboardInterrupt
         
         try:
             curses.wrapper(main)
