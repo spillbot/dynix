@@ -189,6 +189,7 @@ class ObsidianTUI:
         height, width = self.screen.getmaxyx()
         current_selection = 0
         right_panel_scroll = 0  # Track scroll position for right panel
+        full_pane_mode = False  # Track if we're in full-pane view
         
         # Calculate dimensions for split panels
         left_width = width // 2
@@ -205,47 +206,51 @@ class ObsidianTUI:
                 search_line = f"Search terms: {search_terms}"
                 self.screen.addstr(1, (width - len(search_line)) // 2, search_line)
             
-            # Draw vertical separator
-            for y in range(2, height - 1):
-                self.screen.addstr(y, left_width, "│")
-            
-            # Draw results in left panel
-            for idx, (file, content) in enumerate(results):
-                if idx >= height - 3:  # Leave space for instructions and search terms
-                    break
-                    
-                # Get first line (SUBJECT) and filename
-                first_line = content.split('\n')[0].strip()
-                filename = os.path.basename(file)
+            if not full_pane_mode:
+                # Draw vertical separator
+                for y in range(2, height - 1):
+                    self.screen.addstr(y, left_width, "│")
                 
-                # Format display line
-                if first_line.startswith('SUBJECT='):
-                    display = f"{first_line[8:]} ({filename})"
-                else:
-                    display = filename
+                # Draw results in left panel
+                for idx, (file, content) in enumerate(results):
+                    if idx >= height - 3:  # Leave space for instructions and search terms
+                        break
+                        
+                    # Get first line (SUBJECT) and filename
+                    first_line = content.split('\n')[0].strip()
+                    filename = os.path.basename(file)
                     
-                # Truncate if too long
-                if len(display) > left_width - 4:
-                    display = display[:left_width-7] + "..."
-                
-                # Highlight selected item
-                if idx == current_selection:
-                    self.screen.addstr(idx + 2, 2, display, curses.A_REVERSE)
-                else:
-                    self.screen.addstr(idx + 2, 2, display)
+                    # Format display line
+                    if first_line.startswith('SUBJECT='):
+                        display = f"{first_line[8:]} ({filename})"
+                    else:
+                        display = filename
+                        
+                    # Truncate if too long
+                    if len(display) > left_width - 4:
+                        display = display[:left_width-7] + "..."
+                    
+                    # Highlight selected item
+                    if idx == current_selection:
+                        self.screen.addstr(idx + 2, 2, display, curses.A_REVERSE)
+                    else:
+                        self.screen.addstr(idx + 2, 2, display)
             
-            # Draw selected note content in right panel
+            # Draw selected note content
             if results:
                 file, content = results[current_selection]
                 filename = os.path.basename(file)
                 
-                # Draw filename in right panel header
+                # Draw filename in header
                 header = f"Note: {filename}"
-                self.screen.addstr(2, left_width + 2, header, curses.A_BOLD)
+                if full_pane_mode:
+                    self.screen.addstr(2, 2, header, curses.A_BOLD)
+                else:
+                    self.screen.addstr(2, left_width + 2, header, curses.A_BOLD)
                 
                 # Write content directly to screen
                 lines = content.split('\n')
-                visible_lines = height - 4  # Leave space for header and debug info
+                visible_lines = height - 4  # Leave space for header and instructions
                 
                 # Calculate which lines to show based on scroll position
                 start_line = right_panel_scroll
@@ -253,39 +258,56 @@ class ObsidianTUI:
                 
                 # Write visible lines
                 for idx, line in enumerate(lines[start_line:end_line]):
-                    if len(line) > right_width - 4:
-                        line = line[:right_width-7] + "..."
+                    if len(line) > (width - 4 if full_pane_mode else right_width - 4):
+                        line = line[:((width - 7) if full_pane_mode else (right_width - 7))] + "..."
                     try:
-                        self.screen.addstr(idx + 3, left_width + 2, line)
-                    except curses.error as e:
-                        # Debug: Show error for each line that fails
-                        self.screen.addstr(height - 2, left_width + 2, f"Error writing line {idx}: {str(e)}")
-                
-                # Debug: Show content length and scroll position
-                debug_info = f"Content lines: {len(lines)}, Scroll: {right_panel_scroll}, Showing {start_line}-{end_line}"
-                self.screen.addstr(height - 2, left_width + 2, debug_info)
+                        if full_pane_mode:
+                            self.screen.addstr(idx + 3, 2, line)
+                        else:
+                            self.screen.addstr(idx + 3, left_width + 2, line)
+                    except curses.error:
+                        pass
             
             # Draw instructions
-            instructions = "↑↓ to select, PgUp/PgDn to scroll note, Esc to go back, Ctrl+q to exit"
+            if full_pane_mode:
+                instructions = "PgUp/PgDn to scroll, Enter to return to split view, Esc to go back, Ctrl+q to exit"
+            else:
+                instructions = "↑↓ to select, Enter for full view, PgUp/PgDn to scroll note, Esc to go back, Ctrl+q to exit"
             self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
             self.screen.refresh()
             
             key = self.screen.getch()
             
-            if key == curses.KEY_UP and current_selection > 0:
-                current_selection -= 1
-                right_panel_scroll = 0  # Reset scroll when changing notes
-            elif key == curses.KEY_DOWN and current_selection < min(len(results) - 1, height - 4):
-                current_selection += 1
-                right_panel_scroll = 0  # Reset scroll when changing notes
-            elif key == curses.KEY_PPAGE:  # Page Up
-                right_panel_scroll = max(0, right_panel_scroll - (height - 4))
-            elif key == curses.KEY_NPAGE:  # Page Down
-                right_panel_scroll += (height - 4)
-            elif key == 27:  # Esc key
-                break
-            elif key == 17:  # Try Ctrl+q as 17
-                raise KeyboardInterrupt
+            if full_pane_mode:
+                if key == curses.KEY_PPAGE:  # Page Up
+                    right_panel_scroll = max(0, right_panel_scroll - (height - 4))
+                elif key == curses.KEY_NPAGE:  # Page Down
+                    right_panel_scroll += (height - 4)
+                elif key == 10:  # Enter key
+                    full_pane_mode = False
+                    right_panel_scroll = 0
+                elif key == 27:  # Esc key
+                    break
+                elif key == 17:  # Try Ctrl+q as 17
+                    raise KeyboardInterrupt
+            else:
+                if key == curses.KEY_UP and current_selection > 0:
+                    current_selection -= 1
+                    right_panel_scroll = 0  # Reset scroll when changing notes
+                elif key == curses.KEY_DOWN and current_selection < min(len(results) - 1, height - 4):
+                    current_selection += 1
+                    right_panel_scroll = 0  # Reset scroll when changing notes
+                elif key == curses.KEY_PPAGE:  # Page Up
+                    right_panel_scroll = max(0, right_panel_scroll - (height - 4))
+                elif key == curses.KEY_NPAGE:  # Page Down
+                    right_panel_scroll += (height - 4)
+                elif key == 10:  # Enter key
+                    full_pane_mode = True
+                    right_panel_scroll = 0
+                elif key == 27:  # Esc key
+                    break
+                elif key == 17:  # Try Ctrl+q as 17
+                    raise KeyboardInterrupt
 
     def display_content(self, result: Tuple[str, str]):
         """Display content directly in TUI"""
