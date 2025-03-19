@@ -96,18 +96,19 @@ class ObsidianTUI:
     def search_by_date(self, date_str: str) -> List[Tuple[str, str]]:
         results = []
         files = self.get_markdown_files()
-        try:
-            search_date = datetime.strptime(date_str, "%Y-%m-%d")
-            for file in files:
-                file_time = datetime.fromtimestamp(os.path.getmtime(file))
-                if (file_time.year == search_date.year and 
-                    file_time.month == search_date.month and 
-                    file_time.day == search_date.day):
-                    with open(file, 'r', encoding='utf-8') as f:
-                        content = f.read()
+        
+        for file in files:
+            with open(file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+                # Look for ID field anywhere in the content
+                id_match = re.search(r'ID=(\d{8}-\d{4})', content)
+                if id_match:
+                    file_id = id_match.group(1)  # Get the ID value
+                    # Check if the search term matches the start of the ID
+                    if file_id.startswith(date_str):
                         results.append((file, content))
-        except ValueError:
-            pass
+                    
         return results
 
     def get_all_tags(self) -> List[str]:
@@ -323,6 +324,11 @@ class ObsidianTUI:
                         if tags:
                             results = self.search_by_tags(tags)
                             self.draw_results(results, f"Tags: {', '.join(tags)}")
+                    elif self.menu_items[self.current_selection] == "Search by Date":
+                        date_str = self.draw_search_input("Enter date (YYYY or YYYYMM): ")
+                        if date_str:
+                            results = self.search_by_date(date_str)
+                            self.draw_results(results, f"Date: {date_str}")
                 elif key == 3:  # Ctrl+C
                     break
                 elif key == 17:  # Try Ctrl+q as 17
