@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/michael/dev/dynix/venv/bin/python
 
 import curses
 import os
