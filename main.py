@@ -270,9 +270,9 @@ class ObsidianTUI:
             
             # Draw instructions
             if full_pane_mode:
-                instructions = "PgUp/PgDn to scroll, Enter to return to split view, Esc to go back, Ctrl+q to exit"
+                instructions = "PgUp/PgDn to scroll, Enter to return to split view, 'e' to edit, Esc to go back, Ctrl+q to exit"
             else:
-                instructions = "↑↓ to select, Enter for full view, PgUp/PgDn to scroll note, Esc to go back, Ctrl+q to exit"
+                instructions = "↑↓ to select, Enter for full view, PgUp/PgDn to scroll note, 'e' to edit, Esc to go back, Ctrl+q to exit"
             self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
             self.screen.refresh()
             
@@ -286,6 +286,13 @@ class ObsidianTUI:
                 elif key == 10:  # Enter key
                     full_pane_mode = False
                     right_panel_scroll = 0
+                elif key == ord('e'):  # 'e' key to edit
+                    curses.endwin()  # End curses mode
+                    os.system(f"nvim '{file}'")  # Launch nvim with quoted file path
+                    self.screen = curses.initscr()  # Reinitialize screen
+                    curses.curs_set(0)  # Hide cursor
+                    curses.start_color()  # Reinitialize colors
+                    self.screen.clear()  # Clear screen
                 elif key == 27:  # Esc key
                     break
                 elif key == 17:  # Try Ctrl+q as 17
@@ -304,6 +311,13 @@ class ObsidianTUI:
                 elif key == 10:  # Enter key
                     full_pane_mode = True
                     right_panel_scroll = 0
+                elif key == ord('e'):  # 'e' key to edit
+                    curses.endwin()  # End curses mode
+                    os.system(f"nvim '{file}'")  # Launch nvim with quoted file path
+                    self.screen = curses.initscr()  # Reinitialize screen
+                    curses.curs_set(0)  # Hide cursor
+                    curses.start_color()  # Reinitialize colors
+                    self.screen.clear()  # Clear screen
                 elif key == 27:  # Esc key
                     break
                 elif key == 17:  # Try Ctrl+q as 17
