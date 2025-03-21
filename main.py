@@ -143,20 +143,20 @@ class ObsidianTUI:
         
         # Draw title
         title = "Obsidian Vault Search"
-        self.screen.addstr(1, (width - len(title)) // 2, title, curses.A_BOLD)
+        self.screen.addstr(1, (width - len(title)) // 2, title, curses.color_pair(2) | curses.A_BOLD)
         
         # Draw menu items
         for idx, item in enumerate(self.menu_items):
             y = height // 2 - len(self.menu_items) // 2 + idx
             x = (width - len(item)) // 2
             if idx == self.current_selection:
-                self.screen.addstr(y, x, item, curses.A_REVERSE)
+                self.screen.addstr(y, x, item, curses.color_pair(3))
             else:
-                self.screen.addstr(y, x, item)
+                self.screen.addstr(y, x, item, curses.color_pair(1))
         
         # Draw instructions
         instructions = "Use ↑↓ arrows to navigate, Enter to select, Ctrl+Q to exit"
-        self.screen.addstr(height - 2, (width - len(instructions)) // 2, instructions)
+        self.screen.addstr(height - 2, (width - len(instructions)) // 2, instructions, curses.color_pair(1))
         
         self.screen.refresh()
 
@@ -188,8 +188,8 @@ class ObsidianTUI:
         self.screen.clear()
         height, width = self.screen.getmaxyx()
         current_selection = 0
-        right_panel_scroll = 0  # Track scroll position for right panel
-        full_pane_mode = False  # Track if we're in full-pane view
+        right_panel_scroll = 0
+        full_pane_mode = False
         
         # Calculate dimensions for split panels
         left_width = width // 2
@@ -200,41 +200,37 @@ class ObsidianTUI:
             
             # Draw title and search terms
             title = f"Found {len(results)} results"
-            self.screen.addstr(0, (width - len(title)) // 2, title, curses.A_BOLD)
+            self.screen.addstr(0, (width - len(title)) // 2, title, curses.color_pair(2) | curses.A_BOLD)
             
             if search_terms:
                 search_line = f"Search terms: {search_terms}"
-                self.screen.addstr(1, (width - len(search_line)) // 2, search_line)
+                self.screen.addstr(1, (width - len(search_line)) // 2, search_line, curses.color_pair(1))
             
             if not full_pane_mode:
                 # Draw vertical separator
                 for y in range(2, height - 1):
-                    self.screen.addstr(y, left_width, "│")
+                    self.screen.addstr(y, left_width, "│", curses.color_pair(1))
                 
                 # Draw results in left panel
                 for idx, (file, content) in enumerate(results):
-                    if idx >= height - 3:  # Leave space for instructions and search terms
+                    if idx >= height - 3:
                         break
                         
-                    # Get first line (SUBJECT) and filename
                     first_line = content.split('\n')[0].strip()
                     filename = os.path.basename(file)
                     
-                    # Format display line
                     if first_line.startswith('SUBJECT='):
                         display = f"{first_line[8:]} ({filename})"
                     else:
                         display = filename
                         
-                    # Truncate if too long
                     if len(display) > left_width - 4:
                         display = display[:left_width-7] + "..."
                     
-                    # Highlight selected item
                     if idx == current_selection:
-                        self.screen.addstr(idx + 2, 2, display, curses.A_REVERSE)
+                        self.screen.addstr(idx + 2, 2, display, curses.color_pair(3))
                     else:
-                        self.screen.addstr(idx + 2, 2, display)
+                        self.screen.addstr(idx + 2, 2, display, curses.color_pair(1))
             
             # Draw selected note content
             if results:
@@ -244,15 +240,14 @@ class ObsidianTUI:
                 # Draw filename in header
                 header = f"Note: {filename}"
                 if full_pane_mode:
-                    self.screen.addstr(2, 2, header, curses.A_BOLD)
+                    self.screen.addstr(2, 2, header, curses.color_pair(2) | curses.A_BOLD)
                 else:
-                    self.screen.addstr(2, left_width + 2, header, curses.A_BOLD)
+                    self.screen.addstr(2, left_width + 2, header, curses.color_pair(2) | curses.A_BOLD)
                 
                 # Write content directly to screen
                 lines = content.split('\n')
-                visible_lines = height - 4  # Leave space for header and instructions
+                visible_lines = height - 4
                 
-                # Calculate which lines to show based on scroll position
                 start_line = right_panel_scroll
                 end_line = min(start_line + visible_lines, len(lines))
                 
@@ -262,9 +257,9 @@ class ObsidianTUI:
                         line = line[:((width - 7) if full_pane_mode else (right_width - 7))] + "..."
                     try:
                         if full_pane_mode:
-                            self.screen.addstr(idx + 3, 2, line)
+                            self.screen.addstr(idx + 3, 2, line, curses.color_pair(1))
                         else:
-                            self.screen.addstr(idx + 3, left_width + 2, line)
+                            self.screen.addstr(idx + 3, left_width + 2, line, curses.color_pair(1))
                     except curses.error:
                         pass
             
@@ -274,18 +269,16 @@ class ObsidianTUI:
             else:
                 instructions = "↑↓ to select, Enter for full view, PgUp/PgDn to scroll note, 'e' to edit, Esc to go back, Ctrl+q to exit"
             
-            # Truncate instructions if they're too long for the screen
             if len(instructions) > width - 2:
                 instructions = instructions[:width - 5] + "..."
             
             try:
-                self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
+                self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions, curses.color_pair(1))
             except curses.error:
-                # If we still get an error, try to display a shorter message
                 try:
-                    self.screen.addstr(height - 1, 2, "Use arrow keys, Enter, Esc, or Ctrl+q")
+                    self.screen.addstr(height - 1, 2, "Use arrow keys, Enter, Esc, or Ctrl+q", curses.color_pair(1))
                 except curses.error:
-                    pass  # If we still can't write, just skip it
+                    pass
                     
             self.screen.refresh()
             
@@ -387,10 +380,85 @@ class ObsidianTUI:
             elif key == 17:  # Try Ctrl+q as 17
                 raise KeyboardInterrupt
 
+    def show_banner(self):
+        self.screen.clear()
+        height, width = self.screen.getmaxyx()
+        
+        # ASCII art banner
+        banner = [
+            "    ██████╗ ██╗   ██╗███╗   ██╗██╗██╗  ██╗",
+            "   ██╔═══██╗██║   ██║████╗  ██║██║╚██╗██╔╝",
+            "   ██║   ██║██║   ██║██╔██╗ ██║██║ ╚███╔╝ ",
+            "   ██║   ██║██║   ██║██║╚██╗██║██║██╔██║ ",
+            "   ╚██████╔╝╚██████╔╝██║ ╚████║██║██╔╝ ██║",
+            "    ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝",
+            "",
+            "    Digital Library Management System",
+            "    Version 1.0.0",
+            "",
+            "    Initializing system components",
+        ]
+        
+        # Calculate center position
+        start_y = (height - len(banner)) // 2
+        
+        # Draw banner with faster typing effect
+        for idx, line in enumerate(banner):
+            x = (width - len(line)) // 2
+            try:
+                self.screen.addstr(start_y + idx, x, line, curses.color_pair(1))
+                self.screen.refresh()
+                curses.napms(50)  # Reduced delay between lines
+            except curses.error:
+                pass
+        
+        # Quick loading animation
+        loading_text = "Loading"
+        dots = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        x = (width - len(loading_text) - 1) // 2
+        y = start_y + len(banner) + 1
+        
+        # Show only 5 frames of animation
+        for _ in range(5):
+            for dot in dots:
+                try:
+                    self.screen.addstr(y, x, f"{loading_text} {dot}", curses.color_pair(1))
+                    self.screen.refresh()
+                    curses.napms(30)  # Reduced delay between frames
+                except curses.error:
+                    pass
+        
+        # Clear loading text
+        try:
+            self.screen.addstr(y, x, " " * (len(loading_text) + 2), curses.color_pair(1))
+        except curses.error:
+            pass
+        
+        # Final message
+        final_msg = "System ready. Press any key to continue..."
+        x = (width - len(final_msg)) // 2
+        try:
+            self.screen.addstr(y, x, final_msg, curses.color_pair(1))
+            self.screen.refresh()
+        except curses.error:
+            pass
+        
+        # Wait for key press
+        self.screen.getch()
+
     def run(self):
         def main(stdscr):
             self.screen = stdscr
             curses.curs_set(0)  # Hide cursor
+            
+            # Initialize colors
+            curses.start_color()
+            curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Normal text
+            curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Bold text
+            curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_GREEN)  # Selected text
+            
+            # Show startup banner
+            self.show_banner()
             
             while True:
                 self.draw_menu()
