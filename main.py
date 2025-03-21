@@ -273,7 +273,20 @@ class ObsidianTUI:
                 instructions = "PgUp/PgDn to scroll, Enter to return to split view, 'e' to edit, Esc to go back, Ctrl+q to exit"
             else:
                 instructions = "↑↓ to select, Enter for full view, PgUp/PgDn to scroll note, 'e' to edit, Esc to go back, Ctrl+q to exit"
-            self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
+            
+            # Truncate instructions if they're too long for the screen
+            if len(instructions) > width - 2:
+                instructions = instructions[:width - 5] + "..."
+            
+            try:
+                self.screen.addstr(height - 1, (width - len(instructions)) // 2, instructions)
+            except curses.error:
+                # If we still get an error, try to display a shorter message
+                try:
+                    self.screen.addstr(height - 1, 2, "Use arrow keys, Enter, Esc, or Ctrl+q")
+                except curses.error:
+                    pass  # If we still can't write, just skip it
+                    
             self.screen.refresh()
             
             key = self.screen.getch()
